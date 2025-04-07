@@ -89,9 +89,10 @@ export interface IConversationRepository {
 }
 
 export interface IPostRepository {
-  create(data: PostData): Promise<Post>; // Return created post with ID
+  create(data: PostData): Promise<Post>; // Thin wrapper for upsert
   getById(postId: string): Promise<Post | null>;
-  update(postId: string, data: Partial<Omit<PostData, 'conversationId' | 'imagePrompts' | 'contentPieces'>>): Promise<void>;
+  update(postId: string, data: Partial<Omit<PostData, 'conversationId' | 'imagePrompts' | 'contentPieces'>>): Promise<Post>; // Thin wrapper for upsert, returns Post
+  upsert(data: PostData, options?: { mode?: 'create' | 'update', postId?: string }): Promise<Post>; // Upsert method
   setContentPieces(postId: string, content: string[]): Promise<void>;
   // Image Prompts (using Set)
   addImagePrompt(postId: string, prompt: string): Promise<void>;

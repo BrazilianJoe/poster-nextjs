@@ -3,6 +3,25 @@ import { v4 as uuidv4 } from 'uuid';
 import type { IPostRepository } from '../interfaces';
 import type { Post, PostData } from '../types';
 
+// Helper function (consider moving to a shared utils file)
+// Ensures values are suitable for Redis hash (strings, numbers, booleans)
+function cleanHashData(data: Record<string, any>): Record<string, string | number | boolean> {
+    const cleaned: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(data)) {
+        if (value !== null && value !== undefined) {
+            // Allow explicitly setting null for fields like imageLink via hdel later if needed
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                 cleaned[key] = value;
+            } else {
+                 // Stringify non-primitive types (like contentPieces_json)
+                 cleaned[key] = JSON.stringify(value);
+            }
+        }
+    }
+    return cleaned;
+}
+
+
 export class RedisPostRepository implements IPostRepository {
     private redis: Redis;
     private keyPrefix = 'post:';
@@ -21,34 +40,10 @@ export class RedisPostRepository implements IPostRepository {
     }
 
     // --- Core CRUD ---
+    // Thin wrapper for create
     async create(data: PostData): Promise<Post> {
-        const postId = uuidv4();
-        const mainKey = this.getMainKey(postId);
-
-        const postDataForHash: Record<string, string | number | boolean> = {
-            conversationId: data.conversationId,
-            targetPlatform: data.targetPlatform,
-            postType: data.postType,
-            contentPieces_json: JSON.stringify(data.contentPieces), // Store as JSON string
-            // Only include imageLink if it's provided and not null
-            ...(data.imageLink && { imageLink: data.imageLink }),
-        };
-
-        // Create the post hash
-        await this.redis.hset(mainKey, postDataForHash);
-
-        // Note: Adding the postId to the conversation's post set
-        // should be handled by the service layer coordinating with IConversationRepository.
-
-        const newPost: Post = {
-            id: postId,
-            conversationId: data.conversationId,
-            targetPlatform: data.targetPlatform,
-            postType: data.postType,
-            imageLink: data.imageLink ?? null, // Ensure null if undefined
-            contentPieces: data.contentPieces,
-        };
-        return newPost;
+        // Image prompts are handled separately via addImagePrompt
+        return this.upsert(data, { mode: 'create' });
     }
 
     async getById(postId: string): Promise<Post | null> {
@@ -59,19 +54,30 @@ export class RedisPostRepository implements IPostRepository {
             return null; // Key doesn't exist
         }
 
-        // Validate essential fields
-        if (typeof data.conversationId !== 'string' || typeof data.targetPlatform !== 'string' || typeof data.postType !== 'string' || typeof data.contentPieces_json !== 'string') {
+        // Validate essential fields, allowing contentPieces_json to be string or object (array)
+        if (typeof data.conversationId !== 'string' ||
+            typeof data.targetPlatform !== 'string' ||
+            typeof data.postType !== 'string' ||
+            (typeof data.contentPieces_json !== 'string' && typeof data.contentPieces_json !== 'object')) { // Check type
             console.error(`Incomplete or invalid post data found for key: ${mainKey}`, data);
             return null;
         }
 
         let contentPieces: string[] = [];
         try {
-            const parsed = JSON.parse(data.contentPieces_json);
+            let parsed: any;
+            if (typeof data.contentPieces_json === 'string') {
+                parsed = JSON.parse(data.contentPieces_json);
+            } else if (Array.isArray(data.contentPieces_json)) {
+                // Assume it's already the array if it's an object (specifically, an array)
+                parsed = data.contentPieces_json;
+            }
+
+            // Validate parsed structure
             if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
                  contentPieces = parsed;
             } else {
-                 console.error(`contentPieces_json is not an array of strings for post ${postId}`);
+                 console.error(`Parsed contentPieces_json is not an array of strings for post ${postId}:`, parsed);
                  // Default to empty array or handle error as appropriate
             }
         } catch (e) {
@@ -90,36 +96,27 @@ export class RedisPostRepository implements IPostRepository {
         };
     }
 
-    async update(postId: string, data: Partial<Omit<PostData, 'conversationId' | 'imagePrompts' | 'contentPieces'>>): Promise<void> {
-        const mainKey = this.getMainKey(postId);
-        const updateData: Record<string, string> = {};
-
-        if (data.targetPlatform !== undefined) updateData.targetPlatform = data.targetPlatform;
-        if (data.postType !== undefined) updateData.postType = data.postType;
-        // Handle imageLink carefully: allow setting to null via hdel
-        if (data.imageLink !== undefined && data.imageLink !== null) {
-             updateData.imageLink = data.imageLink;
+    // Thin wrapper for update (handles only subset of fields as defined in interface)
+    async update(postId: string, data: Partial<Omit<PostData, 'conversationId' | 'imagePrompts' | 'contentPieces'>>): Promise<Post> {
+        const existingPost = await this.getById(postId);
+        if (!existingPost) {
+            throw new Error(`Post with ID ${postId} not found.`);
         }
 
-        const pipe = this.redis.pipeline();
-        let needsExec = false;
+        // Merge existing data with the partial update data for the allowed fields
+        // Carry over conversationId and contentPieces from existing post
+        const mergedData: PostData = {
+            conversationId: existingPost.conversationId, // Keep existing
+            targetPlatform: data.targetPlatform ?? existingPost.targetPlatform,
+            postType: data.postType ?? existingPost.postType,
+            imageLink: data.imageLink !== undefined ? data.imageLink : existingPost.imageLink, // Allow setting null
+            contentPieces: existingPost.contentPieces, // Keep existing
+        };
 
-        if (Object.keys(updateData).length > 0) {
-            pipe.hset(mainKey, updateData);
-            needsExec = true;
-        }
-
-        // Explicitly handle setting imageLink to null by deleting the field
-        if (data.imageLink === null) {
-            pipe.hdel(mainKey, 'imageLink');
-            needsExec = true;
-        }
-
-        if (needsExec) {
-             // Optional: Check if post exists first
-            await pipe.exec();
-        }
+        // Call upsert to handle the update of the hash data
+        return this.upsert(mergedData, { mode: 'update', postId: postId });
     }
+
 
      async setContentPieces(postId: string, content: string[]): Promise<void> {
          const mainKey = this.getMainKey(postId);
@@ -152,5 +149,84 @@ export class RedisPostRepository implements IPostRepository {
         const mainKey = this.getMainKey(postId);
         const conversationId = await this.redis.hget<string>(mainKey, 'conversationId');
         return conversationId; // Already string | null
+    }
+
+    // --- Upsert Implementation ---
+    async upsert(data: PostData, options?: { mode?: 'create' | 'update', postId?: string }): Promise<Post> {
+        const mode = options?.mode;
+        const providedPostId = options?.postId;
+        let effectivePostId: string;
+
+        if (!mode) {
+            throw new Error("Operation mode ('create' or 'update') must be specified in options.");
+        }
+
+        // Validate contentPieces format early
+        if (!Array.isArray(data.contentPieces) || !data.contentPieces.every(item => typeof item === 'string')) {
+            throw new Error("Invalid content pieces format: must be an array of strings.");
+        }
+
+        if (mode === 'update') {
+            if (!providedPostId) {
+                throw new Error('Post ID must be provided in options for update mode.');
+            }
+            // Verify post exists before update
+            const keyExists = await this.redis.exists(this.getMainKey(providedPostId));
+            if (!keyExists) {
+                 throw new Error(`Post with ID ${providedPostId} not found for update.`);
+            }
+            effectivePostId = providedPostId;
+        } else { // mode === 'create'
+            if (providedPostId) {
+                // Create with specific ID - check if it already exists
+                const keyExists = await this.redis.exists(this.getMainKey(providedPostId));
+                if (keyExists) {
+                    throw new Error(`Post with ID ${providedPostId} already exists. Cannot create.`);
+                }
+                effectivePostId = providedPostId;
+            } else {
+                // Create with new ID
+                effectivePostId = uuidv4();
+            }
+        }
+
+        const mainKey = this.getMainKey(effectivePostId);
+
+        // Prepare data hash using cleanHashData
+        // Explicitly handle contentPieces stringification
+        const postDataForHash = cleanHashData({
+            conversationId: data.conversationId,
+            targetPlatform: data.targetPlatform,
+            postType: data.postType,
+            imageLink: data.imageLink, // Pass directly, cleanHashData handles null/undefined
+            contentPieces_json: JSON.stringify(data.contentPieces), // Stringify here
+        });
+
+        // Perform Redis operation
+        // Use hset which overwrites or creates fields. cleanHashData removes undefined/null fields
+        // except for imageLink which might need explicit deletion if set to null.
+        // However, hset with cleanHashData effectively handles setting fields or leaving them out.
+        // Explicit hdel for null imageLink isn't strictly needed with cleanHashData.
+        await this.redis.hset(mainKey, postDataForHash);
+
+        // If imageLink was explicitly set to null in the input data, ensure it's removed from the hash
+        // (cleanHashData removes nulls, so this might be redundant, but explicit for clarity)
+        if (data.imageLink === null) {
+            await this.redis.hdel(mainKey, 'imageLink');
+        }
+
+
+        // Note: Linking post to conversation (conv:<id>:posts) should happen in the service layer.
+        // Note: Handling image prompts (post:<id>:prompts) happens via separate methods.
+
+        // Return the final state of the post
+        return {
+            id: effectivePostId,
+            conversationId: data.conversationId,
+            targetPlatform: data.targetPlatform,
+            postType: data.postType,
+            imageLink: data.imageLink ?? null, // Ensure null if undefined/null in data
+            contentPieces: data.contentPieces, // Return original array
+        };
     }
 }
