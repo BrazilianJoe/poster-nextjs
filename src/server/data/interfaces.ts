@@ -71,9 +71,11 @@ export interface IProjectRepository {
 }
 
 export interface IConversationRepository {
-  create(data: ConversationData): Promise<Conversation>; // Return created convo with ID
+  create(data: ConversationData): Promise<Conversation>; // Thin wrapper for upsert
   getMetadataById(conversationId: string): Promise<Conversation | null>; // Gets the Hash data
-  updateMetadata(conversationId: string, data: Partial<Omit<ConversationData, 'projectId'>>): Promise<void>;
+  // updateMetadata removed, replaced by general update
+  update(conversationId: string, data: Partial<ConversationData>): Promise<Conversation>; // General update method
+  upsert(data: ConversationData, options?: { mode?: 'create' | 'update', conversationId?: string }): Promise<Conversation>; // Upsert method
   setProject(conversationId: string, projectId: string): Promise<void>;
   getProjectId(conversationId: string): Promise<string | null>;
   // Messages (using List)
