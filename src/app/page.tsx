@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, SignOutButton } from "@clerk/nextjs";
 
 import { LatestPost } from "~/app/_components/post";
 import { api, HydrateClient } from "~/trpc/server";
@@ -15,6 +16,29 @@ export default async function Home() {
           <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
             Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
           </h1>
+          {/* Clerk Auth Buttons */}
+          <div className="flex gap-4">
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
+                  Sign In
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
+                  Sign Up
+                </button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <SignOutButton>
+                <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
+                  Sign Out
+                </button>
+              </SignOutButton>
+            </SignedIn>
+          </div>
+          {/* End Clerk Auth Buttons */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
             <Link
               className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
