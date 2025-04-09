@@ -1,77 +1,90 @@
-import Link from "next/link";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, SignOutButton } from "@clerk/nextjs";
-
-import { LatestPost } from "~/app/_components/post";
-import { api, HydrateClient } from "~/trpc/server";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, SignOutButton } from "@clerk/nextjs"; // Keep Clerk
+import { AppSidebar } from "~/components/app-sidebar"; // From Dashboard
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "~/components/ui/breadcrumb"; // From Dashboard
+import { Separator } from "~/components/ui/separator"; // From Dashboard
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "~/components/ui/sidebar"; // From Dashboard
+import { api, HydrateClient } from "~/trpc/server"; // Keep TRPC
 
 export default async function Home() {
+  // Keep TRPC data fetching
   const hello = await api.post.hello({ text: "from tRPC" });
-
-  void api.post.getLatest.prefetch();
+  void api.post.getLatest.prefetch(); // Keep prefetch, though not used in UI yet
 
   return (
+    // Keep HydrateClient wrapper
     <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-        <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-            Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
-          </h1>
-          {/* Clerk Auth Buttons */}
-          <div className="flex gap-4">
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
-                  Sign In
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
-                  Sign Up
-                </button>
-              </SignUpButton>
-            </SignedOut>
-            <SignedIn>
-              <SignOutButton>
-                <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
-                  Sign Out
-                </button>
-              </SignOutButton>
-            </SignedIn>
+      {/* Insert Dashboard UI Structure */}
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+            <div className="flex w-full items-center gap-2 px-4"> {/* Added w-full */}
+              <SidebarTrigger className="-ml-1" />
+              <Separator
+                orientation="vertical"
+                className="mr-2 data-[orientation=vertical]:h-4"
+              />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem className="hidden md:block">
+                    <BreadcrumbLink href="#">Home</BreadcrumbLink> {/* Updated Breadcrumb */}
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Overview</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+              {/* Add Clerk buttons to the right */}
+               <div className="ml-auto flex gap-2">
+                 <SignedOut>
+                   <SignInButton mode="modal">
+                     <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
+                       Sign In
+                     </button>
+                   </SignInButton>
+                   <SignUpButton mode="modal">
+                     <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
+                       Sign Up
+                     </button>
+                   </SignUpButton>
+                 </SignedOut>
+                 <SignedIn>
+                   <SignOutButton>
+                     <button className="rounded-md bg-white/10 px-4 py-2 text-white hover:bg-white/20">
+                       Sign Out
+                     </button>
+                   </SignOutButton>
+                 </SignedIn>
+               </div>
+            </div>
+          </header>
+          <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+             {/* Display fetched data */}
+             <div className="rounded-xl bg-muted/50 p-4 text-foreground"> {/* Use theme foreground */}
+               <p>tRPC Greeting: {hello ? hello.greeting : "Loading..."}</p>
+             </div>
+             {/* Keep placeholder content divs */}
+            <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+              <div className="bg-muted/50 aspect-video rounded-xl" />
+              <div className="bg-muted/50 aspect-video rounded-xl" />
+              <div className="bg-muted/50 aspect-video rounded-xl" />
+            </div>
+            <div className="bg-muted/50 min-h-[100vh] flex-1 rounded-xl md:min-h-min" />
           </div>
-          {/* End Clerk Auth Buttons */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/usage/first-steps"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">First Steps →</h3>
-              <div className="text-lg">
-                Just the basics - Everything you need to know to set up your
-                database and authentication.
-              </div>
-            </Link>
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/introduction"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">Documentation →</h3>
-              <div className="text-lg">
-                Learn more about Create T3 App, the libraries it uses, and how
-                to deploy it.
-              </div>
-            </Link>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-2xl text-white">
-              {hello ? hello.greeting : "Loading tRPC query..."}
-            </p>
-          </div>
-
-          <LatestPost />
-        </div>
-      </main>
+        </SidebarInset>
+      </SidebarProvider>
     </HydrateClient>
   );
 }
