@@ -13,6 +13,7 @@ import {
 } from "~/components/ui/dropdown-menu"
 import { useSidebar } from "~/components/ui/sidebar"
 import { SidebarMenuButton } from "~/components/ui/sidebar"
+import { cn } from "~/lib/utils"
 
 export function User() {
   const { user } = useClerk()
@@ -25,7 +26,10 @@ export function User() {
       <DropdownMenuTrigger asChild>
         <SidebarMenuButton
           size="lg"
-          className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          className={cn(
+            "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+            !isSidebarOpen && "p-0 justify-center"
+          )}
         >
           <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
             <Avatar className="h-8 w-8">

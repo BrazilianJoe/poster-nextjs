@@ -19,6 +19,7 @@ import {
 } from "~/components/ui/sidebar"
 import { api } from "~/trpc/react"
 import type { Customer } from "~/server/data/types"
+import { cn } from "~/lib/utils"
 
 interface CustomerSwitcherProps {
   onCustomerChange?: (customerId: string) => void
@@ -96,18 +97,23 @@ export function CustomerSwitcher({ onCustomerChange }: CustomerSwitcherProps) {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              className={cn(
+                "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                !isSidebarOpen && "p-0 justify-center"
+              )}
             >
               <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                 <Building2 className="size-4" />
               </div>
               {isSidebarOpen && (
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{activeCustomer.name}</span>
-                  <span className="truncate text-xs">{activeCustomer.industry}</span>
-                </div>
+                <>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">{activeCustomer.name}</span>
+                    <span className="truncate text-xs">{activeCustomer.industry}</span>
+                  </div>
+                  <ChevronsUpDown className="ml-auto" />
+                </>
               )}
-              <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent

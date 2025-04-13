@@ -48,17 +48,20 @@ export function AppSidebar() {
     <div
       className={cn(
         "flex h-screen flex-col border-r bg-background transition-all duration-300 ease-in-out",
-        open ? "w-64" : "w-16"
+        open ? "w-64" : "w-12"
       )}
     >
       <div className={cn(
         "flex h-16 items-center border-b",
-        open ? "px-4" : "px-2"
+        open ? "px-4" : "px-1"
       )}>
         <CustomerSwitcher onCustomerChange={setActiveCustomer} />
       </div>
       <ScrollArea className="flex-1">
-        <nav className="grid items-start gap-2 p-4">
+        <nav className={cn(
+          "grid items-start gap-2",
+          open ? "p-4" : "p-2"
+        )}>
           {navigation.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -66,8 +69,9 @@ export function AppSidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                  isActive ? "bg-accent" : "transparent"
+                  "group flex items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                  isActive ? "bg-accent" : "transparent",
+                  open ? "px-3 py-2" : "px-2 py-2"
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -77,7 +81,10 @@ export function AppSidebar() {
           })}
 
           <Collapsible>
-            <CollapsibleTrigger className="group flex w-full items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+            <CollapsibleTrigger className={cn(
+              "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+              open ? "px-3 py-2" : "px-2 py-2"
+            )}>
               <Icons.folder className="h-4 w-4" />
               {open && (
                 <>
@@ -86,10 +93,16 @@ export function AppSidebar() {
                 </>
               )}
             </CollapsibleTrigger>
-            <CollapsibleContent className="pl-4">
+            <CollapsibleContent className={cn(
+              "pl-4",
+              !open && "pl-2"
+            )}>
               {projects?.map((project) => (
                 <Collapsible key={project.id}>
-                  <CollapsibleTrigger className="group flex w-full items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                  <CollapsibleTrigger className={cn(
+                    "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                    open ? "px-3 py-2" : "px-2 py-2"
+                  )}>
                     {open && (
                       <>
                         <span>{project.name}</span>
@@ -97,9 +110,15 @@ export function AppSidebar() {
                       </>
                     )}
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="pl-4">
+                  <CollapsibleContent className={cn(
+                    "pl-4",
+                    !open && "pl-2"
+                  )}>
                     <Collapsible>
-                      <CollapsibleTrigger className="group flex w-full items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                      <CollapsibleTrigger className={cn(
+                        "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                        open ? "px-3 py-2" : "px-2 py-2"
+                      )}>
                         <Icons.message className="h-4 w-4" />
                         {open && (
                           <>
@@ -108,12 +127,18 @@ export function AppSidebar() {
                           </>
                         )}
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="pl-4">
+                      <CollapsibleContent className={cn(
+                        "pl-4",
+                        !open && "pl-2"
+                      )}>
                         <ProjectConversations projectId={project.id} open={open} />
                       </CollapsibleContent>
                     </Collapsible>
                     <Collapsible>
-                      <CollapsibleTrigger className="group flex w-full items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                      <CollapsibleTrigger className={cn(
+                        "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                        open ? "px-3 py-2" : "px-2 py-2"
+                      )}>
                         <Icons.post className="h-4 w-4" />
                         {open && (
                           <>
@@ -122,7 +147,10 @@ export function AppSidebar() {
                           </>
                         )}
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="pl-4">
+                      <CollapsibleContent className={cn(
+                        "pl-4",
+                        !open && "pl-2"
+                      )}>
                         <ProjectPosts projectId={project.id} open={open} />
                       </CollapsibleContent>
                     </Collapsible>
@@ -135,7 +163,7 @@ export function AppSidebar() {
       </ScrollArea>
       <div className={cn(
         "mt-auto border-t flex items-center",
-        open ? "p-4" : "px-2 py-4"
+        open ? "p-4" : "px-1 py-4"
       )}>
         <User />
       </div>
