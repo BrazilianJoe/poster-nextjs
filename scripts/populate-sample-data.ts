@@ -6,6 +6,8 @@ import { RedisConversationRepository } from '~/server/data/repositories/redisCon
 import { RedisPostRepository } from '~/server/data/repositories/redisPostRepository';
 import { RedisUserRepository } from '~/server/data/repositories/redisUserRepository';
 import { RedisSubscriptionRepository } from '~/server/data/repositories/redisSubscriptionRepository';
+import { RedisPurge } from '../src/server/data/repositories/redisPurge';
+import type { User, Subscription, Customer, Project, Conversation, Post } from '../src/server/data/types';
 
 // Initialize Redis client with production credentials
 const redis = new Redis({
@@ -20,6 +22,7 @@ const customerRepo = new RedisCustomerRepository(redis);
 const projectRepo = new RedisProjectRepository(redis);
 const conversationRepo = new RedisConversationRepository(redis);
 const postRepo = new RedisPostRepository(redis);
+const redisPurge = new RedisPurge(redis);
 
 // Sample user data
 const sampleUser = {
@@ -62,12 +65,12 @@ const sampleProjects = [
   {
     name: 'AI Product Launch',
     customerId: '', // Will be set after customer creation
-    description: 'Marketing campaign for new AI product line',
+    objective: 'Marketing campaign for new AI product line',
   },
   {
     name: 'Sustainability Initiative',
     customerId: '', // Will be set after customer creation
-    description: 'Promoting eco-friendly practices and products',
+    objective: 'Promoting eco-friendly practices and products',
   },
 ];
 
@@ -86,26 +89,30 @@ const sampleConversations = [
 
 const samplePosts = [
   {
-    conversationId: '', // Will be set after conversation creation
-    targetPlatform: 'Twitter',
-    postType: 'Thread',
+    targetPlatform: 'twitter',
+    postType: 'announcement',
     contentPieces: [
       '🚀 Exciting news! We\'re launching our new AI-powered solution that\'s set to revolutionize the industry.',
       'Our latest innovation combines cutting-edge machine learning with intuitive design, making complex tasks simple.',
       'Join us on this journey as we push the boundaries of what\'s possible with AI. #Innovation #AI',
     ],
-    imageLink: 'https://example.com/ai-product.jpg',
+    mediaLinks: [
+      'https://example.com/ai-product-image.jpg',
+      'https://example.com/ai-demo-video.mp4',
+    ],
   },
   {
-    conversationId: '', // Will be set after conversation creation
-    targetPlatform: 'LinkedIn',
-    postType: 'Article',
+    targetPlatform: 'linkedin',
+    postType: 'article',
     contentPieces: [
       'At GreenLife Foods, we believe in sustainable practices that benefit both people and the planet.',
       'Our commitment to organic farming and eco-friendly packaging is just the beginning.',
       'Join us in making a difference, one sustainable choice at a time.',
     ],
-    imageLink: 'https://example.com/sustainability.jpg',
+    mediaLinks: [
+      'https://example.com/sustainable-farming.jpg',
+      'https://example.com/eco-packaging.jpg',
+    ],
   },
 ];
 
@@ -113,8 +120,23 @@ async function populateSampleData() {
   try {
     console.log('Starting to populate sample data...');
 
-    // Create user
-    const user = await userRepo.create(sampleUser);
+    // First, clean up all test data
+    console.log('Cleaning up all test data...');
+    await redisPurge.purgeTestData();
+
+    // Check if user exists and delete if it does
+    let user = await userRepo.findByEmail(sampleUser.email);
+    if (user) {
+      console.log('Found existing user, deleting...');
+      await userRepo.delete(user.id);
+      // Also delete any associated subscription
+      if (user.subscriptionId) {
+        await subscriptionRepo.delete(user.subscriptionId);
+      }
+    }
+
+    // Create new user
+    user = await userRepo.create(sampleUser);
     console.log(`Created user: ${user.name} (${user.email})`);
 
     // Create subscription for the user
@@ -130,10 +152,10 @@ async function populateSampleData() {
     // Create customers with the user as owner
     const customers = await Promise.all(
       sampleCustomers.map(async (customerData) => {
-        const customer = await customerRepo.create({
+        const customer = await customerRepo.upsert({
           ...customerData,
           ownerUserId: user.id,
-        });
+        }, { mode: 'create' });
         console.log(`Created customer: ${customer.name}`);
         return customer;
       })
@@ -145,9 +167,9 @@ async function populateSampleData() {
         const projectData = {
           name: sampleProjects[index]!.name,
           customerId: customer.id,
-          description: sampleProjects[index]!.description,
+          objective: sampleProjects[index]!.objective,
         };
-        const project = await projectRepo.create(projectData);
+        const project = await projectRepo.upsert(projectData, { mode: 'create' });
         console.log(`Created project: ${project.name} for ${customer.name}`);
         return project;
       })
@@ -161,27 +183,34 @@ async function populateSampleData() {
           projectId: project.id,
           timestamp: sampleConversations[index]!.timestamp,
         };
-        const conversation = await conversationRepo.create(conversationData);
+        const conversation = await conversationRepo.upsert(conversationData, { mode: 'create' });
         console.log(`Created conversation: ${conversation.title} for ${project.name}`);
+        
+        // Add conversation to project's set
+        await projectRepo.addConversation(project.id, conversation.id);
+        console.log(`Added conversation ${conversation.title} to project ${project.name}`);
+        
         return conversation;
       })
     );
 
-    // Create posts for each conversation
+    // Create posts for each project
     await Promise.all(
-      conversations.map(async (conversation, index) => {
+      projects.map(async (project, index) => {
         const postData = {
-          conversationId: conversation.id,
+          projectId: project.id,
           targetPlatform: samplePosts[index]!.targetPlatform,
           postType: samplePosts[index]!.postType,
           contentPieces: samplePosts[index]!.contentPieces,
-          imageLink: samplePosts[index]!.imageLink,
+          mediaLinks: samplePosts[index]!.mediaLinks,
         };
-        const post = await postRepo.create(postData);
-        console.log(`Created post for conversation: ${conversation.title}`);
+        const post = await postRepo.upsert(postData, { mode: 'create' });
+        console.log(`Created post for project: ${project.name}`);
         
-        // Add post to conversation
-        await conversationRepo.addPost(conversation.id, post.id);
+        // Add post to project's set
+        await projectRepo.addPost(project.id, post.id);
+        console.log(`Added post to project ${project.name}`);
+        
         return post;
       })
     );
@@ -189,6 +218,7 @@ async function populateSampleData() {
     console.log('Sample data population completed successfully!');
   } catch (error) {
     console.error('Error populating sample data:', error);
+    process.exit(1);
   }
 }
 

@@ -19,15 +19,15 @@ function cleanHashData(data: Record<string, any>): Record<string, string | numbe
     return cleaned;
 }
 
-
 export class RedisConversationRepository implements IConversationRepository {
     private redis: Redis;
-    private keyPrefix = 'conv:';
+    private keyPrefix: string;
     private messagesSuffix = ':messages';
     private postsSuffix = ':posts';
 
-    constructor(redisClient: Redis) {
+    constructor(redisClient: Redis, prefix: string = '') {
         this.redis = redisClient;
+        this.keyPrefix = `${prefix}conv:`;
     }
 
     // --- Key Generation ---
@@ -37,143 +37,105 @@ export class RedisConversationRepository implements IConversationRepository {
     private getMessagesKey(conversationId: string): string {
         return `${this.getMainKey(conversationId)}${this.messagesSuffix}`;
     }
-    private getPostsKey(conversationId: string): string {
-        return `${this.getMainKey(conversationId)}${this.postsSuffix}`;
-    }
 
-    // --- Core CRUD ---
-    // Thin wrapper for create
     async create(data: ConversationData): Promise<Conversation> {
         return this.upsert(data, { mode: 'create' });
     }
 
-    // Thin wrapper for update
-    async update(conversationId: string, data: Partial<ConversationData>): Promise<Conversation> {
-        const existingConversation = await this.getMetadataById(conversationId);
-        if (!existingConversation) {
-            throw new Error(`Conversation with ID ${conversationId} not found.`);
-        }
-        // Merge existing data with the partial update data
-        const mergedData: ConversationData = {
-            title: data.title ?? existingConversation.title,
-            projectId: data.projectId ?? existingConversation.projectId,
-            timestamp: data.timestamp ?? existingConversation.timestamp,
-        };
-        return this.upsert(mergedData, { mode: 'update', conversationId: conversationId });
+    async getMetadataById(conversationId: string): Promise<Conversation | null> {
+        return this.getById(conversationId);
     }
 
-    async getMetadataById(conversationId: string): Promise<Conversation | null> {
+    async getById(conversationId: string): Promise<Conversation | null> {
         const mainKey = this.getMainKey(conversationId);
         const data = await this.redis.hgetall(mainKey);
 
         if (!data) {
-            return null; // Key doesn't exist
+            return null;
         }
 
         // Validate essential fields
-        if (typeof data.title !== 'string' || typeof data.projectId !== 'string' || typeof data.timestamp === 'undefined') { // Check timestamp presence
-            console.error(`Incomplete or invalid conversation metadata found for key: ${mainKey}`, data);
+        if (typeof data.projectId !== 'string' || typeof data.title !== 'string') {
+            console.error(`Incomplete or invalid conversation data found for key: ${mainKey}`, data);
             return null;
         }
 
         return {
             id: conversationId,
-            title: data.title,
             projectId: data.projectId,
-            timestamp: String(data.timestamp), // Ensure timestamp is string
+            title: data.title,
         };
     }
 
-    // updateMetadata removed as it's replaced by the general update method
+    async update(conversationId: string, data: Partial<ConversationData>): Promise<Conversation> {
+        const existingConversation = await this.getById(conversationId);
+        if (!existingConversation) {
+            throw new Error(`Conversation with ID ${conversationId} not found.`);
+        }
+
+        const mergedData: ConversationData = {
+            projectId: existingConversation.projectId,
+            title: data.title || existingConversation.title,
+        };
+
+        return this.upsert(mergedData, { mode: 'update', conversationId });
+    }
 
     async setProject(conversationId: string, projectId: string): Promise<void> {
         const mainKey = this.getMainKey(conversationId);
-        // Optional: Check if conversation exists first
-        await this.redis.hset(mainKey, { projectId: projectId });
-        // Note: Updating the project's conversation sets (removing from old, adding to new)
-        // must be handled by the service layer coordinating with IProjectRepository.
+        await this.redis.hset(mainKey, { projectId });
     }
 
     async getProjectId(conversationId: string): Promise<string | null> {
         const mainKey = this.getMainKey(conversationId);
-        const projectId = await this.redis.hget<string>(mainKey, 'projectId');
-        return projectId; // Already string | null
+        const data = await this.redis.hget(mainKey, 'projectId');
+        return typeof data === 'string' ? data : null;
     }
 
-    // --- Messages (List) ---
     async addMessage(conversationId: string, message: Message): Promise<void> {
         const messagesKey = this.getMessagesKey(conversationId);
-        // Add timestamp if missing? Or assume it's provided. Let's ensure it exists.
-        const messageWithTimestamp = { ...message, timestamp: message.timestamp ?? Date.now().toString() };
-        try {
-            const messageString = JSON.stringify(messageWithTimestamp);
-            await this.redis.rpush(messagesKey, messageString);
-        } catch (e) {
-             console.error(`Failed to stringify message for conversation ${conversationId}:`, messageWithTimestamp, e);
-             // Decide how to handle - throw error? Log and skip?
-             throw new Error(`Failed to serialize message for conversation ${conversationId}`);
-        }
+        await this.redis.rpush(messagesKey, JSON.stringify(message));
     }
 
     async getMessages(conversationId: string, start: number = 0, end: number = -1): Promise<Message[]> {
         const messagesKey = this.getMessagesKey(conversationId);
-        // lrange might return strings or already parsed objects depending on client/data
-        const messageItems = await this.redis.lrange(messagesKey, start, end);
-        const parsedMessages: Message[] = [];
-
-        for (const item of messageItems) {
-            let parsed: any = null;
-            try {
-                if (typeof item === 'string') {
-                    parsed = JSON.parse(item);
-                } else if (item && typeof item === 'object') {
-                    // Assume it's already the object we want if not a string
-                    parsed = item;
-                }
-
-                // Validate the structure (basic check)
-                // TODO: Add more robust validation (e.g., using Zod)
-                if (parsed && typeof parsed === 'object' && parsed.role && parsed.content) {
-                    // Ensure timestamp is string if present (it should be added by addMessage)
-                    if (parsed.timestamp !== undefined) {
-                        parsed.timestamp = String(parsed.timestamp);
-                    }
-                    parsedMessages.push(parsed as Message);
-                } else {
-                    console.warn(`Invalid or unexpected message structure found in conversation ${conversationId}:`, item);
-                }
-            } catch (e) {
-                console.error(`Failed to process message item for conversation ${conversationId}:`, item, e);
-                // Optionally push a placeholder error message
-                // parsedMessages.push({ role: 'system', content: '[Error: Failed to process message]' });
-             }
-        }
-         return parsedMessages;
+        const messages = await this.redis.lrange(messagesKey, start, end);
+        return messages.map(msg => JSON.parse(msg));
     }
 
     async getRecentMessages(conversationId: string, count: number): Promise<Message[]> {
-        if (count <= 0) return [];
-        // LRANGE end index is inclusive, so to get last 'count' items, end is -1, start is -count
-        return this.getMessages(conversationId, -count, -1);
+        const messagesKey = this.getMessagesKey(conversationId);
+        const messages = await this.redis.lrange(messagesKey, -count, -1);
+        return messages.map(msg => JSON.parse(msg));
     }
 
-    // --- Post Relationships ---
     async addPost(conversationId: string, postId: string): Promise<void> {
-        const postsKey = this.getPostsKey(conversationId);
-        await this.redis.sadd(postsKey, postId);
+        const mainKey = this.getMainKey(conversationId);
+        await this.redis.hset(mainKey, { postId });
     }
 
     async removePost(conversationId: string, postId: string): Promise<void> {
-        const postsKey = this.getPostsKey(conversationId);
-        await this.redis.srem(postsKey, postId);
+        const mainKey = this.getMainKey(conversationId);
+        await this.redis.hset(mainKey, { postId: null });
     }
 
     async getPostIds(conversationId: string): Promise<string[]> {
-        const postsKey = this.getPostsKey(conversationId);
-        return await this.redis.smembers(postsKey);
+        const mainKey = this.getMainKey(conversationId);
+        const postId = await this.redis.hget<string>(mainKey, 'postId');
+        return postId ? [postId] : [];
     }
 
-    // --- Upsert Implementation ---
+    async delete(conversationId: string): Promise<void> {
+        const mainKey = this.getMainKey(conversationId);
+        const messagesKey = this.getMessagesKey(conversationId);
+        
+        // Use pipeline for atomicity
+        const pipe = this.redis.pipeline();
+        pipe.del(mainKey);
+        pipe.del(messagesKey);
+        await pipe.exec();
+    }
+
     async upsert(data: ConversationData, options?: { mode?: 'create' | 'update', conversationId?: string }): Promise<Conversation> {
         const mode = options?.mode;
         const providedConversationId = options?.conversationId;
@@ -187,46 +149,35 @@ export class RedisConversationRepository implements IConversationRepository {
             if (!providedConversationId) {
                 throw new Error('Conversation ID must be provided in options for update mode.');
             }
-            // Verify conversation exists before update
             const keyExists = await this.redis.exists(this.getMainKey(providedConversationId));
             if (!keyExists) {
-                 throw new Error(`Conversation with ID ${providedConversationId} not found for update.`);
+                throw new Error(`Conversation with ID ${providedConversationId} not found for update.`);
             }
             effectiveConversationId = providedConversationId;
         } else { // mode === 'create'
             if (providedConversationId) {
-                // Create with specific ID - check if it already exists
                 const keyExists = await this.redis.exists(this.getMainKey(providedConversationId));
                 if (keyExists) {
                     throw new Error(`Conversation with ID ${providedConversationId} already exists. Cannot create.`);
                 }
                 effectiveConversationId = providedConversationId;
             } else {
-                // Create with new ID
                 effectiveConversationId = uuidv4();
             }
         }
 
         const mainKey = this.getMainKey(effectiveConversationId);
-
-        // Prepare data hash using cleanHashData
         const conversationDataForHash = cleanHashData({
-            title: data.title,
             projectId: data.projectId,
-            timestamp: data.timestamp, // Pass string directly
+            title: data.title,
         });
 
-        // Perform Redis operation
         await this.redis.hset(mainKey, conversationDataForHash);
 
-        // Note: Linking conversation to project (proj:<id>:conversations) should happen in the service layer.
-
-        // Return the final state of the conversation
         return {
             id: effectiveConversationId,
-            title: data.title,
             projectId: data.projectId,
-            timestamp: data.timestamp,
+            title: data.title,
         };
     }
 }

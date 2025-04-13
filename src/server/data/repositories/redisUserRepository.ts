@@ -154,7 +154,30 @@ export class RedisUserRepository implements IUserRepository {
             await this.redis.hset(key, { subscriptionId });
         }
     }
-    
-     // Note: Deleting a user would require removing the hash and the email index entry.
-     // async delete(userId: string): Promise<void> { ... }
+
+    async delete(userId: string): Promise<void> {
+        const user = await this.getById(userId);
+        if (!user) {
+            throw new Error(`User with ID ${userId} not found.`);
+        }
+
+        const key = this.getKey(userId);
+        const emailIndexKey = this.getEmailIndexKey(user.email);
+
+        // Use pipeline for atomicity
+        const pipe = this.redis.pipeline();
+
+        // Delete main user data
+        pipe.del(key);
+
+        // Delete email index
+        pipe.del(emailIndexKey);
+
+        // Execute all operations atomically
+        await pipe.exec();
+
+        // Note: The service layer should handle:
+        // 1. Updating any subscriptions associated with this user
+        // 2. Any other cleanup needed
+    }
 }

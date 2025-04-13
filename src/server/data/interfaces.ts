@@ -22,6 +22,7 @@ export interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
   update(userId: string, data: Partial<UserData>): Promise<void>; // Thin wrapper for upsert with 'update' mode
   setSubscriptionId(userId: string, subscriptionId: string | null): Promise<void>;
+  delete(userId: string): Promise<void>;
 }
 
 export interface ISubscriptionRepository {
@@ -29,6 +30,7 @@ export interface ISubscriptionRepository {
   getById(subscriptionId: string): Promise<Subscription | null>;
   findByUserId(userId: string): Promise<Subscription | null>;
   update(subscriptionId: string, data: Partial<SubscriptionData>): Promise<void>;
+  delete(subscriptionId: string): Promise<void>;
 }
 
 export interface ICustomerRepository {
@@ -50,6 +52,8 @@ export interface ICustomerRepository {
   getPermissionForUser(customerId: string, userId: string): Promise<UserRole | null>;
   // Updated upsert signature to match implementation requirements
   upsert(data: CustomerData, options?: { mode?: 'create' | 'update', customerId?: string }): Promise<Customer>;
+  delete(customerId: string): Promise<void>;
+  listByOwner(ownerUserId: string): Promise<Customer[]>;
 }
 
 export interface IProjectRepository {
@@ -68,6 +72,8 @@ export interface IProjectRepository {
   update(projectId: string, data: Partial<ProjectData>): Promise<Project>;
   // Add upsert method mirroring ICustomerRepository
   upsert(data: ProjectData, options?: { mode?: 'create' | 'update', projectId?: string }): Promise<Project>;
+  delete(projectId: string): Promise<void>;
+  listByCustomer(customerId: string): Promise<Project[]>;
 }
 
 export interface IConversationRepository {
@@ -86,17 +92,24 @@ export interface IConversationRepository {
   addPost(conversationId: string, postId: string): Promise<void>;
   removePost(conversationId: string, postId: string): Promise<void>;
   getPostIds(conversationId: string): Promise<string[]>;
+  delete(conversationId: string): Promise<void>;
 }
 
 export interface IPostRepository {
   create(data: PostData): Promise<Post>; // Thin wrapper for upsert
   getById(postId: string): Promise<Post | null>;
-  update(postId: string, data: Partial<Omit<PostData, 'conversationId' | 'imagePrompts' | 'contentPieces'>>): Promise<Post>; // Thin wrapper for upsert, returns Post
+  update(postId: string, data: Partial<Omit<PostData, 'projectId' | 'contentPieces'>>): Promise<Post>; // Thin wrapper for upsert, returns Post
   upsert(data: PostData, options?: { mode?: 'create' | 'update', postId?: string }): Promise<Post>; // Upsert method
   setContentPieces(postId: string, content: string[]): Promise<void>;
   // Image Prompts (using Set)
   addImagePrompt(postId: string, prompt: string): Promise<void>;
   removeImagePrompt(postId: string, prompt: string): Promise<void>;
   getImagePrompts(postId: string): Promise<string[]>;
-  getConversationId(postId: string): Promise<string | null>;
+  // Project Relationships
+  getProjectId(postId: string): Promise<string | null>;
+  // Conversation Relationships (0:n)
+  addConversation(postId: string, conversationId: string): Promise<void>;
+  removeConversation(postId: string, conversationId: string): Promise<void>;
+  getConversationIds(postId: string): Promise<string[]>;
+  delete(postId: string): Promise<void>;
 }

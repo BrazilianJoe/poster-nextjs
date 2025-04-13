@@ -115,17 +115,38 @@ export class RedisSubscriptionRepository implements ISubscriptionRepository {
         }
     }
 
-     // Note: Deleting a subscription would require removing the hash and the user index entry.
-     // Service layer should also coordinate updating the User's subscriptionId field.
-     // async delete(subscriptionId: string): Promise<void> {
-     //     const sub = await this.getById(subscriptionId);
-     //     if (!sub) return; // Or throw error
-     //     const mainKey = this.getMainKey(subscriptionId);
-     //     const userIndexKey = this.getUserIndexKey(sub.userId);
-     //     const pipe = this.redis.pipeline();
-     //     pipe.del(mainKey);
-     //     pipe.del(userIndexKey);
-     //     // Service layer must call userRepo.setSubscriptionId(sub.userId, null)
-     //     await pipe.exec();
-     // }
+    async setUserId(subscriptionId: string, userId: string | null): Promise<void> {
+        const mainKey = this.getMainKey(subscriptionId);
+        if (userId === null) {
+            await this.redis.hdel(mainKey, 'userId');
+        } else {
+            await this.redis.hset(mainKey, { userId });
+        }
+    }
+
+    async delete(subscriptionId: string): Promise<void> {
+        const subscription = await this.getById(subscriptionId);
+        if (!subscription) {
+            throw new Error(`Subscription with ID ${subscriptionId} not found.`);
+        }
+
+        const mainKey = this.getMainKey(subscriptionId);
+        const userIndexKey = this.getUserIndexKey(subscription.userId);
+
+        // Use pipeline for atomicity
+        const pipe = this.redis.pipeline();
+
+        // Delete main subscription data
+        pipe.del(mainKey);
+
+        // Delete user index
+        pipe.del(userIndexKey);
+
+        // Execute all operations atomically
+        await pipe.exec();
+
+        // Note: The service layer should handle:
+        // 1. Updating the user's subscriptionId field
+        // 2. Any other cleanup needed
+    }
 }
