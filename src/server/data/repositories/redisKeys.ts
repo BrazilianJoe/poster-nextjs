@@ -32,12 +32,16 @@ export class RedisKeys {
     }
 
     // Related keys
+    customerPermissions(customerId: string): string {
+        return this.join('cust', customerId, 'permissions');
+    }
+
     customerProjects(customerId: string): string {
         return this.join('cust', customerId, 'projects');
     }
 
-    customerPermissions(customerId: string): string {
-        return this.join('cust', customerId, 'permissions');
+    userCustomers(userId: string): string {
+        return this.join('user', userId, 'customers');
     }
 
     projectConversations(projectId: string): string {

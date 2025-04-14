@@ -1,7 +1,7 @@
 import type {
     User, UserData, UserRole,
     Subscription, SubscriptionData,
-    Customer, CustomerData,
+    Customer, CustomerData, CustomerAccess,
     Project, ProjectData,
     Conversation, ConversationData, Message,
     Post, PostData
@@ -34,26 +34,19 @@ export interface ISubscriptionRepository {
 }
 
 export interface ICustomerRepository {
-  create(data: CustomerData): Promise<Customer>; // Return created customer with ID
+  create(data: CustomerData): Promise<Customer>;
   getById(customerId: string): Promise<Customer | null>;
-  updateBasicInfo(customerId: string, data: Partial<{ name: string; industry: string; }>): Promise<void>;
-  updateAiContext(customerId: string, context: Record<string, any>): Promise<void>;
-  getAiContext(customerId: string): Promise<Record<string, any> | null>;
-  setOwner(customerId: string, ownerUserId: string): Promise<void>;
-  getOwnerUserId(customerId: string): Promise<string | null>;
-  // Project Relationships
+  update(customerId: string, data: Partial<CustomerData>): Promise<Customer>;
+  delete(customerId: string): Promise<void>;
+  getPermissions(customerId: string): Promise<Record<string, UserRole>>;
+  setPermission(customerId: string, userId: string, role: UserRole): Promise<void>;
+  removePermission(customerId: string, userId: string): Promise<void>;
+  setOwner(customerId: string, newOwnerUserId: string): Promise<void>;
+  listUserCustomers(userId: string): Promise<CustomerAccess[]>;
+  listUserCustomersWithDetails(userId: string): Promise<(Customer & { role: UserRole })[]>;
   addProject(customerId: string, projectId: string): Promise<void>;
   removeProject(customerId: string, projectId: string): Promise<void>;
   getProjectIds(customerId: string): Promise<string[]>;
-  // Permissions
-  getPermissions(customerId: string): Promise<Record<string, UserRole>>; // Map: userId -> role
-  setPermission(customerId: string, userId: string, role: UserRole): Promise<void>;
-  removePermission(customerId: string, userId: string): Promise<void>;
-  getPermissionForUser(customerId: string, userId: string): Promise<UserRole | null>;
-  // Updated upsert signature to match implementation requirements
-  upsert(data: CustomerData, options?: { mode?: 'create' | 'update', customerId?: string }): Promise<Customer>;
-  delete(customerId: string): Promise<void>;
-  listByOwner(ownerUserId: string): Promise<Customer[]>;
 }
 
 export interface IProjectRepository {

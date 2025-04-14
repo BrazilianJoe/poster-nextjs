@@ -112,9 +112,24 @@ describeIf('RedisConversationRepository Integration Tests', () => {
         const conversationData: ConversationData = { title: 'Message Test Convo', projectId };
         const conversation = await conversationRepository.create(conversationData);
 
-        const message1: Message = { role: 'user', content: 'Hello there!' };
-        const message2: Message = { role: 'assistant', content: 'General Kenobi!' };
-        const message3: Message = { role: 'user', content: 'How are you?' };
+        const message1: Message = { 
+            role: 'user', 
+            content: 'Hello there!',
+            timestamp: new Date().toISOString(),
+            authorId: 'user_123'
+        };
+        const message2: Message = { 
+            role: 'assistant', 
+            content: 'General Kenobi!',
+            timestamp: new Date().toISOString(),
+            authorId: 'gpt-4'
+        };
+        const message3: Message = { 
+            role: 'user', 
+            content: 'How are you?',
+            timestamp: new Date().toISOString(),
+            authorId: 'user_123'
+        };
 
         await conversationRepository.addMessage(conversation.id, message1);
         await conversationRepository.addMessage(conversation.id, message2);
@@ -122,17 +137,21 @@ describeIf('RedisConversationRepository Integration Tests', () => {
 
         const allMessages = await conversationRepository.getMessages(conversation.id);
         expect(allMessages).toHaveLength(3);
-        // Check content and role, ignore timestamp added by addMessage for simplicity unless critical
+        // Check content, role, authorId, and timestamp
         expect(allMessages[0]?.role).toBe(message1.role);
         expect(allMessages[0]?.content).toBe(message1.content);
+        expect(allMessages[0]?.authorId).toBe(message1.authorId);
+        expect(allMessages[0]?.timestamp).toBe(message1.timestamp);
+        
         expect(allMessages[1]?.role).toBe(message2.role);
         expect(allMessages[1]?.content).toBe(message2.content);
+        expect(allMessages[1]?.authorId).toBe(message2.authorId);
+        expect(allMessages[1]?.timestamp).toBe(message2.timestamp);
+        
         expect(allMessages[2]?.role).toBe(message3.role);
         expect(allMessages[2]?.content).toBe(message3.content);
-        // Check if timestamps were added
-        expect(allMessages[0]?.timestamp).toBeTypeOf('string');
-        expect(allMessages[1]?.timestamp).toBeTypeOf('string');
-        expect(allMessages[2]?.timestamp).toBeTypeOf('string');
+        expect(allMessages[2]?.authorId).toBe(message3.authorId);
+        expect(allMessages[2]?.timestamp).toBe(message3.timestamp);
     });
 
     it('should retrieve recent messages correctly', async () => {
@@ -141,11 +160,36 @@ describeIf('RedisConversationRepository Integration Tests', () => {
         const conversation = await conversationRepository.create(conversationData);
 
         const messages: Message[] = [
-            { role: 'user', content: 'Msg 1' },
-            { role: 'assistant', content: 'Msg 2' },
-            { role: 'user', content: 'Msg 3' },
-            { role: 'assistant', content: 'Msg 4' },
-            { role: 'user', content: 'Msg 5' },
+            { 
+                role: 'user', 
+                content: 'Msg 1',
+                timestamp: new Date().toISOString(),
+                authorId: 'user_123'
+            },
+            { 
+                role: 'assistant', 
+                content: 'Msg 2',
+                timestamp: new Date().toISOString(),
+                authorId: 'gpt-4'
+            },
+            { 
+                role: 'user', 
+                content: 'Msg 3',
+                timestamp: new Date().toISOString(),
+                authorId: 'user_123'
+            },
+            { 
+                role: 'assistant', 
+                content: 'Msg 4',
+                timestamp: new Date().toISOString(),
+                authorId: 'gpt-4'
+            },
+            { 
+                role: 'user', 
+                content: 'Msg 5',
+                timestamp: new Date().toISOString(),
+                authorId: 'user_123'
+            },
         ];
 
         for (const msg of messages) {
@@ -179,7 +223,12 @@ describeIf('RedisConversationRepository Integration Tests', () => {
         const conversation = await conversationRepository.create(conversationData);
         const messagesKey = `conv:${conversation.id}:messages`;
 
-        const validMessage: Message = { role: 'user', content: 'Valid message' };
+        const validMessage: Message = { 
+            role: 'user', 
+            content: 'Valid message',
+            timestamp: new Date().toISOString(),
+            authorId: 'user_123'
+        };
         const invalidJsonString = '{ "role": "user", "content": "Invalid JSON'; // Missing closing brace
 
         await conversationRepository.addMessage(conversation.id, validMessage);
@@ -193,13 +242,13 @@ describeIf('RedisConversationRepository Integration Tests', () => {
 
         // Should return only the valid message
         expect(messages).toHaveLength(1);
-         expect(messages[0]?.content).toBe(validMessage.content);
-         // Check that console.error was called for the invalid message
-         expect(consoleErrorSpy).toHaveBeenCalledWith(
-             expect.stringContaining(`Failed to process message item for conversation ${conversation.id}`),
-             expect.stringContaining(invalidJsonString),
-             expect.any(Error) // Expect a SyntaxError or similar
-         );
+        expect(messages[0]?.content).toBe(validMessage.content);
+        // Check that console.error was called for the invalid message
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect.stringContaining(`Failed to process message item for conversation ${conversation.id}`),
+            expect.stringContaining(invalidJsonString),
+            expect.any(Error) // Expect a SyntaxError or similar
+        );
 
         consoleErrorSpy.mockRestore(); // Clean up spy
     });

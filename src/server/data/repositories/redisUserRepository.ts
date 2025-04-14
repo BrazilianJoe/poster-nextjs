@@ -20,6 +20,7 @@ export class RedisUserRepository implements IUserRepository {
     private redis: Redis;
     private keyPrefix = 'user:';
     private emailIndexPrefix = 'user_email:'; // For findByEmail lookup
+    private clerkIdIndexPrefix = 'user_clerk:'; // For findByClerkId lookup
 
     constructor(redisClient: Redis) {
         this.redis = redisClient;
@@ -34,8 +35,13 @@ export class RedisUserRepository implements IUserRepository {
         return `${this.emailIndexPrefix}${email.toLowerCase()}`;
     }
 
+    private getClerkIdIndexKey(clerkId: string): string {
+        return `${this.clerkIdIndexPrefix}${clerkId}`;
+    }
+
     async upsert(data: UserData, mode?: 'create' | 'update'): Promise<User> {
         const emailIndexKey = this.getEmailIndexKey(data.email);
+        const clerkIdIndexKey = this.getClerkIdIndexKey(data.clerkId);
         const existingUserId = await this.redis.get(emailIndexKey);
 
         if (mode === 'create' && existingUserId) {
@@ -54,18 +60,20 @@ export class RedisUserRepository implements IUserRepository {
         const userDataForHash = {
             name: data.name,
             email: data.email,
+            clerkId: data.clerkId,
             subscriptionId: data.subscriptionId ?? null,
         };
 
         await this.redis.hset(key, userDataForHash);
-        // Consider potential failure setting index? For now, proceed.
         await this.redis.set(emailIndexKey, userId);
+        await this.redis.set(clerkIdIndexKey, userId);
 
         // Construct and return the correct User type
         const returnUser: User = {
-            id: userId, // Now guaranteed to be string
+            id: userId,
             name: data.name,
             email: data.email,
+            clerkId: data.clerkId,
             subscriptionId: data.subscriptionId ?? null
         };
         return returnUser;
@@ -79,13 +87,12 @@ export class RedisUserRepository implements IUserRepository {
         const key = this.getKey(userId);
         console.log(`Retrieving data for key: ${key}`);
         const data = await this.redis.hgetall(key);
-        // console.log(`Retrieved data:`, data); // Remove debug log
 
         if (!data) {
             return null; // Key doesn't exist
         }
         // Validate essential fields retrieved from hash
-        if (typeof data.email !== 'string' || typeof data.name !== 'string') {
+        if (typeof data.email !== 'string' || typeof data.name !== 'string' || typeof data.clerkId !== 'string') {
              console.error(`Incomplete or invalid user data found for key: ${key}`, data);
              return null; // Data integrity issue
         }
@@ -93,9 +100,10 @@ export class RedisUserRepository implements IUserRepository {
         // Construct and return the correct User type
         return {
             id: userId,
-            email: data.email, // Already validated as string
-            name: data.name,   // Already validated as string
-            subscriptionId: typeof data.subscriptionId === 'string' ? data.subscriptionId : null, // Ensure correct type or null
+            email: data.email,
+            name: data.name,
+            clerkId: data.clerkId,
+            subscriptionId: typeof data.subscriptionId === 'string' ? data.subscriptionId : null,
         };
     }
 
@@ -104,6 +112,17 @@ export class RedisUserRepository implements IUserRepository {
         console.log(`Looking up email index key: ${emailIndexKey}`);
         const userId = await this.redis.get<string>(emailIndexKey);
         console.log(`Retrieved user ID for email: ${userId}`);
+        if (!userId) {
+            return null;
+        }
+        return this.getById(userId);
+    }
+
+    async findByClerkId(clerkId: string): Promise<User | null> {
+        const clerkIdIndexKey = this.getClerkIdIndexKey(clerkId);
+        console.log(`Looking up clerk ID index key: ${clerkIdIndexKey}`);
+        const userId = await this.redis.get<string>(clerkIdIndexKey);
+        console.log(`Retrieved user ID for clerk ID: ${userId}`);
         if (!userId) {
             return null;
         }
@@ -163,6 +182,7 @@ export class RedisUserRepository implements IUserRepository {
 
         const key = this.getKey(userId);
         const emailIndexKey = this.getEmailIndexKey(user.email);
+        const clerkIdIndexKey = this.getClerkIdIndexKey(user.clerkId);
 
         // Use pipeline for atomicity
         const pipe = this.redis.pipeline();
@@ -172,6 +192,9 @@ export class RedisUserRepository implements IUserRepository {
 
         // Delete email index
         pipe.del(emailIndexKey);
+
+        // Delete clerk ID index
+        pipe.del(clerkIdIndexKey);
 
         // Execute all operations atomically
         await pipe.exec();

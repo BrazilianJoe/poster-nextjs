@@ -9,6 +9,8 @@
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
+import { getAuth } from "@clerk/nextjs/server";
+import { type NextRequest } from "next/server";
 
 /**
  * 1. CONTEXT
@@ -22,9 +24,12 @@ import { ZodError } from "zod";
  *
  * @see https://trpc.io/docs/server/context
  */
-export const createTRPCContext = async (opts: { headers: Headers }) => {
+export const createTRPCContext = async (opts: { headers: Headers; req?: NextRequest }) => {
+  const auth = opts.req ? getAuth(opts.req) : { userId: null };
+  console.log('TRPC Context - Auth:', auth);
   return {
     ...opts,
+    userId: auth.userId,
   };
 };
 
@@ -101,3 +106,23 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
  * are logged in.
  */
 export const publicProcedure = t.procedure.use(timingMiddleware);
+
+/**
+ * Protected (authenticated) procedure
+ *
+ * This is the base piece you use to build new queries and mutations on your tRPC API that require authentication.
+ * It guarantees that a user querying is authorized by checking for a valid user ID in the context.
+ */
+export const protectedProcedure = t.procedure.use(timingMiddleware).use(
+  t.middleware(async ({ ctx, next }) => {
+    if (!ctx.userId) {
+      throw new Error("You must be logged in to access this resource");
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        userId: ctx.userId,
+      },
+    });
+  }),
+);

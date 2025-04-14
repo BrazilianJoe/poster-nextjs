@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { MessageSquare, Folder, LayoutDashboard, Menu, ChevronRight, FileText, ChevronDown } from "lucide-react"
+import { MessageSquare, Folder, LayoutDashboard, Menu, ChevronRight, FileText, ChevronDown, Plus } from "lucide-react"
 
 export const Icons = {
   dashboard: LayoutDashboard,
@@ -9,4 +9,5 @@ export const Icons = {
   chevronRight: ChevronRight,
   chevronDown: ChevronDown,
   post: FileText,
+  plus: Plus,
 } 

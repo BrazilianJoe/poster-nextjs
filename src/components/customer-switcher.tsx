@@ -23,23 +23,96 @@ import { cn } from "~/lib/utils"
 
 interface CustomerSwitcherProps {
   onCustomerChange?: (customerId: string) => void
+  activeCustomerId?: string
 }
 
-export function CustomerSwitcher({ onCustomerChange }: CustomerSwitcherProps) {
+export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: CustomerSwitcherProps) {
   const { isMobile, open: isSidebarOpen } = useSidebar()
-  const { data: customers = [] } = api.customer.list.useQuery()
+  const { data: customers = [], isLoading, error } = api.customer.list.useQuery(undefined, {
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
   const [activeCustomer, setActiveCustomer] = React.useState<Customer | undefined>(undefined)
 
-  // Update active customer when customers data changes
+  // Add debug logging
   React.useEffect(() => {
-    if (customers.length > 0 && !activeCustomer) {
-      setActiveCustomer(customers[0])
+    console.log('Component state:', {
+      customers,
+      isLoading,
+      error,
+      activeCustomer,
+      activeCustomerId
+    })
+  }, [customers, isLoading, error, activeCustomer, activeCustomerId])
+
+  // Update active customer when customers data changes or activeCustomerId changes
+  React.useEffect(() => {
+    if (customers.length > 0) {
+      console.log('Setting active customer from customers list:', customers)
+      if (activeCustomerId) {
+        const customer = customers.find(c => c.id === activeCustomerId)
+        console.log('Found customer by ID:', customer)
+        if (customer) {
+          setActiveCustomer(customer)
+        }
+      } else if (!activeCustomer) {
+        console.log('Setting first customer as active:', customers[0])
+        setActiveCustomer(customers[0])
+      }
     }
-  }, [customers, activeCustomer])
+  }, [customers, activeCustomer, activeCustomerId])
 
   const handleCustomerChange = (customer: Customer) => {
     setActiveCustomer(customer)
     onCustomerChange?.(customer.id)
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="lg"
+            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          >
+            <div className="bg-destructive text-destructive-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+              <Building2 className="size-4" />
+            </div>
+            {isSidebarOpen && (
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-medium">Error loading customers</span>
+                <span className="truncate text-xs">Please try again</span>
+              </div>
+            )}
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="lg"
+            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          >
+            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+              <Building2 className="size-4" />
+            </div>
+            {isSidebarOpen && (
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-medium">Loading customers...</span>
+                <span className="truncate text-xs">Please wait</span>
+              </div>
+            )}
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
   }
 
   // If there are no customers, show a placeholder
@@ -80,8 +153,8 @@ export function CustomerSwitcher({ onCustomerChange }: CustomerSwitcherProps) {
             </div>
             {isSidebarOpen && (
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">Loading...</span>
-                <span className="truncate text-xs">Please wait</span>
+                <span className="truncate font-medium">Select a customer</span>
+                <span className="truncate text-xs">Choose from the list</span>
               </div>
             )}
           </SidebarMenuButton>
@@ -95,26 +168,28 @@ export function CustomerSwitcher({ onCustomerChange }: CustomerSwitcherProps) {
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className={cn(
-                "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
-                !isSidebarOpen && "p-0 justify-center"
-              )}
-            >
-              <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                <Building2 className="size-4" />
-              </div>
-              {isSidebarOpen && (
-                <>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{activeCustomer.name}</span>
-                    <span className="truncate text-xs">{activeCustomer.industry}</span>
-                  </div>
-                  <ChevronsUpDown className="ml-auto" />
-                </>
-              )}
-            </SidebarMenuButton>
+            <div className="w-full">
+              <SidebarMenuButton
+                size="lg"
+                className={cn(
+                  "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                  !isSidebarOpen && "p-0 justify-center"
+                )}
+              >
+                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Building2 className="size-4" />
+                </div>
+                {isSidebarOpen && (
+                  <>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-medium">{activeCustomer.name}</span>
+                      <span className="truncate text-xs">{activeCustomer.industry}</span>
+                    </div>
+                    <ChevronsUpDown className="ml-auto" />
+                  </>
+                )}
+              </SidebarMenuButton>
+            </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"

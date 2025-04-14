@@ -37,6 +37,9 @@ export class RedisConversationRepository implements IConversationRepository {
     private getMessagesKey(conversationId: string): string {
         return `${this.getMainKey(conversationId)}${this.messagesSuffix}`;
     }
+    private getPostsKey(conversationId: string): string {
+        return `${this.getMainKey(conversationId)}${this.postsSuffix}`;
+    }
 
     async create(data: ConversationData): Promise<Conversation> {
         return this.upsert(data, { mode: 'create' });
@@ -94,7 +97,12 @@ export class RedisConversationRepository implements IConversationRepository {
 
     async addMessage(conversationId: string, message: Message): Promise<void> {
         const messagesKey = this.getMessagesKey(conversationId);
-        await this.redis.rpush(messagesKey, JSON.stringify(message));
+        // Ensure timestamp is set if not provided
+        const messageWithTimestamp = {
+            ...message,
+            timestamp: message.timestamp || new Date().toISOString()
+        };
+        await this.redis.rpush(messagesKey, JSON.stringify(messageWithTimestamp));
     }
 
     async getMessages(conversationId: string, start: number = 0, end: number = -1): Promise<Message[]> {
@@ -110,29 +118,30 @@ export class RedisConversationRepository implements IConversationRepository {
     }
 
     async addPost(conversationId: string, postId: string): Promise<void> {
-        const mainKey = this.getMainKey(conversationId);
-        await this.redis.hset(mainKey, { postId });
+        const postsKey = this.getPostsKey(conversationId);
+        await this.redis.sadd(postsKey, postId);
     }
 
     async removePost(conversationId: string, postId: string): Promise<void> {
-        const mainKey = this.getMainKey(conversationId);
-        await this.redis.hset(mainKey, { postId: null });
+        const postsKey = this.getPostsKey(conversationId);
+        await this.redis.srem(postsKey, postId);
     }
 
     async getPostIds(conversationId: string): Promise<string[]> {
-        const mainKey = this.getMainKey(conversationId);
-        const postId = await this.redis.hget<string>(mainKey, 'postId');
-        return postId ? [postId] : [];
+        const postsKey = this.getPostsKey(conversationId);
+        return await this.redis.smembers(postsKey);
     }
 
     async delete(conversationId: string): Promise<void> {
         const mainKey = this.getMainKey(conversationId);
         const messagesKey = this.getMessagesKey(conversationId);
+        const postsKey = this.getPostsKey(conversationId);
         
         // Use pipeline for atomicity
         const pipe = this.redis.pipeline();
         pipe.del(mainKey);
         pipe.del(messagesKey);
+        pipe.del(postsKey);
         await pipe.exec();
     }
 

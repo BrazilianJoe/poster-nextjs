@@ -1,5 +1,5 @@
 // ===== User Types =====
-export type UserRole = "owner" | "admin" | "editor" | "viewer";
+export type UserRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
 /**
  * Represents a user in the system
@@ -8,6 +8,7 @@ export interface User {
     id: string;
     email: string;
     name: string;
+    clerkId: string;
     subscriptionId?: string | null;
 }
 
@@ -17,6 +18,7 @@ export interface User {
 export interface UserData {
     email: string;
     name: string;
+    clerkId: string;
     subscriptionId?: string | null;
 }
 
@@ -42,25 +44,30 @@ export interface SubscriptionData {
 
 // ===== Customer Types =====
 /**
- * Represents a customer/client in the system
- */
-export interface Customer {
-    id: string;
-    name: string;
-    ownerUserId: string;
-    industry?: string;
-    aiContext?: Record<string, any>;
-}
-
-/**
  * Data required to create or update a customer
  */
-export interface CustomerData {
+export type CustomerData = {
     name: string;
     ownerUserId: string;
     industry?: string;
     aiContext?: Record<string, any>;
-}
+};
+
+/**
+ * Represents a customer/client in the system
+ */
+export type Customer = CustomerData & {
+    id: string;
+    permissions: Record<string, UserRole>;
+};
+
+/**
+ * Represents a user's access to a customer
+ */
+export type CustomerAccess = {
+    customerId: string;
+    role: UserRole;
+};
 
 // ===== Project Types =====
 /**
@@ -108,7 +115,8 @@ export interface ConversationData {
 export interface Message {
     role: "user" | "assistant" | "system";
     content: string;
-    timestamp?: string;
+    timestamp: string;
+    authorId: string;
 }
 
 // ===== Post Types =====

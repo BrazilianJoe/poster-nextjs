@@ -15,7 +15,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --run --bail=1",
-    "populate": "dotenv -e .env -- tsx scripts/populate-sample-data.ts"
+    "populate": "dotenv -e .env -- tsx scripts/populate-sample-data.ts $*"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.13.0",

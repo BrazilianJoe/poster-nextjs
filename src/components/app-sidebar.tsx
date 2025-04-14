@@ -17,6 +17,8 @@ import {
 import { api } from "~/trpc/react"
 import type { Conversation, Post } from "~/server/data/types"
 import { useSidebar } from "~/components/ui/sidebar"
+import { MessageSquare, ChevronRight, Plus } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 const navigation = [
   {
@@ -32,6 +34,7 @@ export function AppSidebar() {
   const { data: customers = [] } = api.customer.list.useQuery()
   const [activeCustomer, setActiveCustomer] = React.useState<string | undefined>(undefined)
   const { data: projects = [] } = api.project.list.useQuery(activeCustomer)
+  const router = useRouter()
 
   React.useEffect(() => {
     setOpen(!isMobile)
@@ -40,9 +43,21 @@ export function AppSidebar() {
   // Set the first customer as active when customers are loaded
   React.useEffect(() => {
     if (customers.length > 0 && !activeCustomer) {
-      setActiveCustomer(customers[0]?.id)
+      const firstCustomer = customers[0]
+      if (firstCustomer) {
+        setActiveCustomer(firstCustomer.id)
+      }
     }
   }, [customers, activeCustomer])
+
+  // Update the URL when the active customer changes
+  React.useEffect(() => {
+    if (activeCustomer) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('customer', activeCustomer)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [activeCustomer])
 
   return (
     <div
@@ -55,7 +70,10 @@ export function AppSidebar() {
         "flex h-16 items-center border-b",
         open ? "px-4" : "px-1"
       )}>
-        <CustomerSwitcher onCustomerChange={setActiveCustomer} />
+        <CustomerSwitcher 
+          onCustomerChange={setActiveCustomer} 
+          activeCustomerId={activeCustomer}
+        />
       </div>
       <ScrollArea className="flex-1">
         <nav className={cn(
@@ -89,7 +107,15 @@ export function AppSidebar() {
               {open && (
                 <>
                   <span className="ml-2">Projects</span>
-                  <Icons.chevronRight className="ml-auto h-4 w-4 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                  <div className="ml-auto flex items-center gap-2">
+                    <Icons.chevronRight className="h-4 w-4 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    <div 
+                      className="flex h-4 w-4 items-center justify-center rounded-md p-0 hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => console.log('Add project')}
+                    >
+                      <Icons.plus className="h-4 w-4" />
+                    </div>
+                  </div>
                 </>
               )}
             </CollapsibleTrigger>
@@ -119,11 +145,22 @@ export function AppSidebar() {
                         "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                         open ? "px-3 py-2" : "px-2 py-2"
                       )}>
-                        <Icons.message className="h-4 w-4" />
+                        <MessageSquare className="mr-2 h-4 w-4" />
                         {open && (
                           <>
-                            <span className="ml-2">Conversations</span>
-                            <Icons.chevronRight className="ml-auto h-4 w-4 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                            <span>Conversations</span>
+                            <div className="ml-auto flex items-center gap-2">
+                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/project/${project.id}/conversation/new`);
+                                }}
+                                className="flex h-4 w-4 items-center justify-center rounded-md p-0 hover:bg-accent hover:text-accent-foreground"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </div>
+                            </div>
                           </>
                         )}
                       </CollapsibleTrigger>
@@ -139,11 +176,22 @@ export function AppSidebar() {
                         "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                         open ? "px-3 py-2" : "px-2 py-2"
                       )}>
-                        <Icons.post className="h-4 w-4" />
+                        <Icons.post className="mr-2 h-4 w-4" />
                         {open && (
                           <>
-                            <span className="ml-2">Posts</span>
-                            <Icons.chevronRight className="ml-auto h-4 w-4 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                            <span>Posts</span>
+                            <div className="ml-auto flex items-center gap-2">
+                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/project/${project.id}/post/new`);
+                                }}
+                                className="flex h-4 w-4 items-center justify-center rounded-md p-0 hover:bg-accent hover:text-accent-foreground"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </div>
+                            </div>
                           </>
                         )}
                       </CollapsibleTrigger>

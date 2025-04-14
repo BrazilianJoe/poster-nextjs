@@ -1,60 +1,46 @@
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { RedisCustomerRepository } from "~/server/data/repositories/redisCustomerRepository";
+import { RedisUserRepository } from "~/server/data/repositories/redisUserRepository";
 import { redis } from "~/server/data/redis";
 import type { Customer, CustomerData, UserRole } from "~/server/data/types";
 import { RedisKeys } from "~/server/data/repositories/redisKeys";
 
 const customerRepository = new RedisCustomerRepository(redis);
+const userRepository = new RedisUserRepository(redis);
 const keys = new RedisKeys();
 
-export const customerRouter = createTRPCRouter({
-  list: publicProcedure.query(async () => {
-    // First, let's see all keys in Redis
-    const allKeys = await redis.keys('*');
-    console.log('All Redis keys:', allKeys);
+// Define the context type
+type Context = {
+  userId?: string;
+  headers: Headers;
+};
 
-    // Get all customer keys using the RedisKeys pattern
-    const customerPattern = keys.customer('*');
-    console.log('Customer pattern:', customerPattern);
-    const customerKeys = await redis.keys(customerPattern);
-    console.log('Found customer keys:', customerKeys);
+export const customerRouter = createTRPCRouter({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    console.log("Customer router - list - clerkId:", ctx.userId);
     
-    if (customerKeys.length === 0) {
-      console.log('No customer keys found. Checking with direct pattern...');
-      const directKeys = await redis.keys('cust:*');
-      console.log('Direct pattern keys:', directKeys);
-      if (directKeys.length > 0) {
-        customerKeys.push(...directKeys);
-      }
+    // Find internal user ID using Clerk ID
+    const user = await userRepository.findByClerkId(ctx.userId!);
+    if (!user) {
+      console.log("No internal user found for Clerk ID:", ctx.userId);
+      return [];
     }
     
-    // Get each customer by ID (remove the prefix)
-    const customers = await Promise.all(
-      customerKeys.map((key: string) => {
-        // Extract the ID by removing the namespace and prefix
-        const id = key.replace(/^.*cust:/, '');
-        console.log(`Processing key: ${key}`);
-        console.log(`Extracted ID: ${id}`);
-        return customerRepository.getById(id);
-      })
-    );
-
-    // Filter out null values (in case any customer was deleted)
-    const validCustomers = customers.filter((customer: Customer | null): customer is Customer => customer !== null);
-    console.log('Found valid customers:', validCustomers.length);
-    console.log('Valid customers:', validCustomers);
-    return validCustomers;
+    console.log("Found internal user:", user.id);
+    const customers = await customerRepository.listUserCustomersWithDetails(user.id);
+    console.log("Customer router - list - customers:", customers);
+    return customers;
   }),
 
-  getById: publicProcedure
+  getById: protectedProcedure
     .input(z.string())
     .query(async ({ input: customerId }) => {
       return customerRepository.getById(customerId);
     }),
 
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       name: z.string(),
       ownerUserId: z.string(),
@@ -65,32 +51,18 @@ export const customerRouter = createTRPCRouter({
       return customerRepository.create(input);
     }),
 
-  updateBasicInfo: publicProcedure
+  update: protectedProcedure
     .input(z.object({
       customerId: z.string(),
       name: z.string().optional(),
       industry: z.string().optional(),
+      aiContext: z.record(z.any()).optional(),
     }))
     .mutation(async ({ input: { customerId, ...data } }) => {
-      return customerRepository.updateBasicInfo(customerId, data);
+      return customerRepository.update(customerId, data);
     }),
 
-  updateAiContext: publicProcedure
-    .input(z.object({
-      customerId: z.string(),
-      context: z.record(z.any()),
-    }))
-    .mutation(async ({ input: { customerId, context } }) => {
-      return customerRepository.updateAiContext(customerId, context);
-    }),
-
-  getAiContext: publicProcedure
-    .input(z.string())
-    .query(async ({ input: customerId }) => {
-      return customerRepository.getAiContext(customerId);
-    }),
-
-  setOwner: publicProcedure
+  setOwner: protectedProcedure
     .input(z.object({
       customerId: z.string(),
       ownerUserId: z.string(),
@@ -99,14 +71,8 @@ export const customerRouter = createTRPCRouter({
       return customerRepository.setOwner(customerId, ownerUserId);
     }),
 
-  getOwnerUserId: publicProcedure
-    .input(z.string())
-    .query(async ({ input: customerId }) => {
-      return customerRepository.getOwnerUserId(customerId);
-    }),
-
   // Project Relationships
-  addProject: publicProcedure
+  addProject: protectedProcedure
     .input(z.object({
       customerId: z.string(),
       projectId: z.string(),
@@ -115,7 +81,7 @@ export const customerRouter = createTRPCRouter({
       return customerRepository.addProject(customerId, projectId);
     }),
 
-  removeProject: publicProcedure
+  removeProject: protectedProcedure
     .input(z.object({
       customerId: z.string(),
       projectId: z.string(),
@@ -124,20 +90,20 @@ export const customerRouter = createTRPCRouter({
       return customerRepository.removeProject(customerId, projectId);
     }),
 
-  getProjectIds: publicProcedure
+  getProjectIds: protectedProcedure
     .input(z.string())
     .query(async ({ input: customerId }) => {
       return customerRepository.getProjectIds(customerId);
     }),
 
   // Permissions
-  getPermissions: publicProcedure
+  getPermissions: protectedProcedure
     .input(z.string())
     .query(async ({ input: customerId }) => {
       return customerRepository.getPermissions(customerId);
     }),
 
-  setPermission: publicProcedure
+  setPermission: protectedProcedure
     .input(z.object({
       customerId: z.string(),
       userId: z.string(),
@@ -147,7 +113,7 @@ export const customerRouter = createTRPCRouter({
       return customerRepository.setPermission(customerId, userId, role);
     }),
 
-  removePermission: publicProcedure
+  removePermission: protectedProcedure
     .input(z.object({
       customerId: z.string(),
       userId: z.string(),
@@ -156,18 +122,22 @@ export const customerRouter = createTRPCRouter({
       return customerRepository.removePermission(customerId, userId);
     }),
 
-  getPermissionForUser: publicProcedure
-    .input(z.object({
-      customerId: z.string(),
-      userId: z.string(),
-    }))
-    .query(async ({ input: { customerId, userId } }) => {
-      return customerRepository.getPermissionForUser(customerId, userId);
-    }),
+  getActive: protectedProcedure.query(async ({ ctx }) => {
+    // Get the current user's ID from the context
+    const userId = (ctx as Context).userId;
+    if (!userId) {
+      console.log('No user ID found in context');
+      return null;
+    }
 
-  listByOwner: publicProcedure
-    .input(z.string())
-    .query(async ({ input: ownerUserId }) => {
-      return customerRepository.listByOwner(ownerUserId);
-    }),
+    // Get all customers the user has access to
+    const customers = await customerRepository.listUserCustomersWithDetails(userId);
+    if (customers.length === 0) {
+      console.log('No customers found for user');
+      return null;
+    }
+
+    // Return the first customer (could be enhanced to remember last active)
+    return customers[0];
+  }),
 }); 
