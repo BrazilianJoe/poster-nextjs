@@ -102,19 +102,74 @@ export class RedisConversationRepository implements IConversationRepository {
             ...message,
             timestamp: message.timestamp || new Date().toISOString()
         };
-        await this.redis.rpush(messagesKey, JSON.stringify(messageWithTimestamp));
+        
+        // Make sure to stringify the message object properly
+        try {
+            // Log the message type before stringifying to help with debugging
+            console.debug('Adding message, type:', typeof messageWithTimestamp, 'to conversation:', conversationId);
+            
+            const messageJson = JSON.stringify(messageWithTimestamp);
+            await this.redis.rpush(messagesKey, messageJson);
+        } catch (error) {
+            console.error('Error adding message to Redis:', error);
+            throw new Error(`Failed to add message: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async getMessages(conversationId: string, start: number = 0, end: number = -1): Promise<Message[]> {
         const messagesKey = this.getMessagesKey(conversationId);
-        const messages = await this.redis.lrange(messagesKey, start, end);
-        return messages.map(msg => JSON.parse(msg));
+        try {
+            const messages = await this.redis.lrange(messagesKey, start, end);
+            return messages.map(msg => {
+                try {
+                    // Handle the case where msg might be an object already
+                    if (typeof msg === 'object' && msg !== null) {
+                        return msg as Message;
+                    }
+                    return JSON.parse(msg);
+                } catch (error) {
+                    console.error(`Error parsing message from Redis: ${msg}`, error);
+                    // Return a fallback message to avoid breaking the client
+                    return {
+                        role: "system",
+                        content: "Error: Could not parse message",
+                        timestamp: new Date().toISOString(),
+                        authorId: "system"
+                    };
+                }
+            });
+        } catch (error) {
+            console.error('Error getting messages from Redis:', error);
+            throw new Error(`Failed to get messages: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async getRecentMessages(conversationId: string, count: number): Promise<Message[]> {
         const messagesKey = this.getMessagesKey(conversationId);
-        const messages = await this.redis.lrange(messagesKey, -count, -1);
-        return messages.map(msg => JSON.parse(msg));
+        try {
+            const messages = await this.redis.lrange(messagesKey, -count, -1);
+            return messages.map(msg => {
+                try {
+                    // Handle the case where msg might be an object already
+                    if (typeof msg === 'object' && msg !== null) {
+                        return msg as Message;
+                    }
+                    return JSON.parse(msg);
+                } catch (error) {
+                    console.error(`Error parsing recent message from Redis: ${msg}`, error);
+                    // Return a fallback message to avoid breaking the client
+                    return {
+                        role: "system",
+                        content: "Error: Could not parse message",
+                        timestamp: new Date().toISOString(),
+                        authorId: "system"
+                    };
+                }
+            });
+        } catch (error) {
+            console.error('Error getting recent messages from Redis:', error);
+            throw new Error(`Failed to get recent messages: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async addPost(conversationId: string, postId: string): Promise<void> {

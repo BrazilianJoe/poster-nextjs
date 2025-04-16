@@ -2,7 +2,7 @@ import { createTRPCRouter, publicProcedure } from "~/server/api/trpc"
 import { RedisConversationRepository } from "~/server/data/repositories/redisConversationRepository"
 import { RedisProjectRepository } from "~/server/data/repositories/redisProjectRepository"
 import { redis } from "~/server/data/redis"
-import type { Conversation } from "~/server/data/types"
+import type { Conversation, Message } from "~/server/data/types"
 import { z } from "zod"
 
 const conversationRepository = new RedisConversationRepository(redis)
@@ -62,5 +62,37 @@ export const conversationRouter = createTRPCRouter({
         conversationIds.map((id) => conversationRepository.getMetadataById(id))
       )
       return conversations.filter((c): c is Conversation => c !== null)
+    }),
+
+  // Get a conversation by ID
+  getById: publicProcedure
+    .input(z.string())
+    .query(async ({ input: conversationId }) => {
+      return await conversationRepository.getById(conversationId)
+    }),
+
+  // Get messages for a conversation
+  getMessages: publicProcedure
+    .input(z.string())
+    .query(async ({ input: conversationId }) => {
+      return await conversationRepository.getMessages(conversationId)
+    }),
+
+  // Add a message to a conversation
+  addMessage: publicProcedure
+    .input(z.object({
+      conversationId: z.string(),
+      message: z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string(),
+        timestamp: z.string(),
+        authorId: z.string(),
+      }),
+    }))
+    .mutation(async ({ input }) => {
+      await conversationRepository.addMessage(input.conversationId, input.message)
+      
+      // Return all messages for the conversation
+      return await conversationRepository.getMessages(input.conversationId)
     }),
 }) 
