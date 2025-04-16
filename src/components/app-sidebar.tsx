@@ -140,17 +140,18 @@ export function AppSidebar() {
                     "pl-4",
                     !open && "pl-2"
                   )}>
-                    <Collapsible>
-                      <CollapsibleTrigger className={cn(
-                        "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                        open ? "px-3 py-2" : "px-2 py-2"
-                      )}>
+                    <div className="space-y-1">
+                      <div
+                        className={cn(
+                          "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                          open ? "px-3 py-2" : "px-2 py-2"
+                        )}
+                      >
                         <MessageSquare className="mr-2 h-4 w-4" />
                         {open && (
                           <>
                             <span>Conversations</span>
                             <div className="ml-auto flex items-center gap-2">
-                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -163,25 +164,21 @@ export function AppSidebar() {
                             </div>
                           </>
                         )}
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className={cn(
-                        "pl-4",
-                        !open && "pl-2"
-                      )}>
-                        <ProjectConversations projectId={project.id} open={open} />
-                      </CollapsibleContent>
-                    </Collapsible>
-                    <Collapsible>
-                      <CollapsibleTrigger className={cn(
-                        "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                        open ? "px-3 py-2" : "px-2 py-2"
-                      )}>
+                      </div>
+                      <ProjectConversations projectId={project.id} open={open} />
+                    </div>
+                    <div className="space-y-1">
+                      <div
+                        className={cn(
+                          "group flex w-full items-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                          open ? "px-3 py-2" : "px-2 py-2"
+                        )}
+                      >
                         <Icons.post className="mr-2 h-4 w-4" />
                         {open && (
                           <>
                             <span>Posts</span>
                             <div className="ml-auto flex items-center gap-2">
-                              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -194,14 +191,9 @@ export function AppSidebar() {
                             </div>
                           </>
                         )}
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className={cn(
-                        "pl-4",
-                        !open && "pl-2"
-                      )}>
-                        <ProjectPosts projectId={project.id} open={open} />
-                      </CollapsibleContent>
-                    </Collapsible>
+                      </div>
+                      <ProjectPosts projectId={project.id} open={open} />
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
               ))}

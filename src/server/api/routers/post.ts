@@ -1,13 +1,18 @@
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { RedisPostRepository } from "~/server/data/repositories/redisPostRepository";
 import { RedisProjectRepository } from "~/server/data/repositories/redisProjectRepository";
+import { RedisCustomerRepository } from "~/server/data/repositories/redisCustomerRepository";
+import { RedisUserRepository } from "~/server/data/repositories/redisUserRepository";
 import { redis } from "~/server/data/redis";
 import type { Post as PostType } from "~/server/data/types";
+import { TRPCError } from "@trpc/server";
 
 const postRepository = new RedisPostRepository(redis);
 const projectRepository = new RedisProjectRepository(redis);
+const customerRepository = new RedisCustomerRepository(redis);
+const userRepository = new RedisUserRepository(redis);
 
 // Mocked DB
 interface Post {
@@ -22,7 +27,7 @@ const posts: Post[] = [
 ];
 
 export const postRouter = createTRPCRouter({
-  hello: publicProcedure
+  hello: protectedProcedure
     .input(z.object({ text: z.string() }))
     .query(({ input }) => {
       return {
@@ -30,7 +35,7 @@ export const postRouter = createTRPCRouter({
       };
     }),
 
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       projectId: z.string(),
       targetPlatform: z.string(),
@@ -38,7 +43,43 @@ export const postRouter = createTRPCRouter({
       contentPieces: z.array(z.string()),
       mediaLinks: z.array(z.string()).optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.userId) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'You must be logged in to create posts'
+        });
+      }
+
+      // Find internal user ID using Clerk ID
+      const user = await userRepository.findByClerkId(ctx.userId);
+      if (!user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'User not found in system'
+        });
+      }
+
+      // Get project to verify customer access
+      const project = await projectRepository.getById(input.projectId);
+      if (!project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found'
+        });
+      }
+
+      // Verify user has access to the customer
+      const customerAccess = await customerRepository.listUserCustomers(user.id);
+      const hasAccess = customerAccess.some(c => c.customerId === project.customerId);
+      
+      if (!hasAccess) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: "You don't have permission to create posts in this project"
+        });
+      }
+
       try {
         // Create the post
         const post = await postRepository.create({
@@ -60,63 +101,104 @@ export const postRouter = createTRPCRouter({
       }
     }),
 
-  getLatest: publicProcedure.query(() => {
-    return posts.at(-1) ?? null;
+  getLatest: protectedProcedure.query(() => {
+    return null;
   }),
 
-  list: publicProcedure
+  list: protectedProcedure
     .input(z.string())
-    .query(async ({ input: projectId }) => {
-      try {
-        // Get all post IDs for the project using the project repository
-        const postIds = await projectRepository.getPostIds(projectId);
-        console.log(`Found ${postIds.length} post IDs for project ${projectId}:`, postIds);
-        
-        if (postIds.length === 0) {
-          return [];
-        }
-
-        // Get metadata for each post using the post repository
-        const posts = await Promise.all(
-          postIds.map(async (id) => {
-            const post = await postRepository.getById(id);
-            if (!post) {
-              console.warn(`Post ${id} not found, but was in project's post set`);
-              return null;
-            }
-            return post;
-          })
-        );
-
-        // Filter out null values and ensure type safety
-        const validPosts = posts.filter((post): post is PostType => 
-          post !== null && 
-          typeof post.projectId === 'string' &&
-          typeof post.targetPlatform === 'string' &&
-          typeof post.postType === 'string' &&
-          Array.isArray(post.mediaLinks) &&
-          Array.isArray(post.contentPieces)
-        );
-        console.log(`Found ${validPosts.length} valid posts for project ${projectId}`);
-        return validPosts;
-      } catch (error) {
-        console.error(`Error listing posts for project ${projectId}:`, error);
-        throw error;
+    .query(async ({ ctx, input: projectId }) => {
+      if (!ctx.userId) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'You must be logged in to list posts'
+        });
       }
+
+      // Find internal user ID using Clerk ID
+      const user = await userRepository.findByClerkId(ctx.userId);
+      if (!user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'User not found in system'
+        });
+      }
+
+      // Get project to verify customer access
+      const project = await projectRepository.getById(projectId);
+      if (!project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found'
+        });
+      }
+
+      // Verify user has access to the customer
+      const customerAccess = await customerRepository.listUserCustomers(user.id);
+      const hasAccess = customerAccess.some(c => c.customerId === project.customerId);
+      
+      if (!hasAccess) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: "You don't have permission to view posts in this project"
+        });
+      }
+
+      const postIds = await projectRepository.getPostIds(projectId);
+      const posts = await Promise.all(
+        postIds.map((id) => postRepository.getById(id))
+      );
+      return posts.filter((p): p is PostType => p !== null);
     }),
 
-  getById: publicProcedure
+  getById: protectedProcedure
     .input(z.string())
-    .query(async ({ input: postId }) => {
-      try {
-        const post = await postRepository.getById(postId);
-        if (!post) {
-          throw new Error(`Post with ID ${postId} not found`);
-        }
-        return post;
-      } catch (error) {
-        console.error(`Error getting post ${postId}:`, error);
-        throw error;
+    .query(async ({ ctx, input: postId }) => {
+      if (!ctx.userId) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'You must be logged in to view posts'
+        });
       }
+
+      // Find internal user ID using Clerk ID
+      const user = await userRepository.findByClerkId(ctx.userId);
+      if (!user) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'User not found in system'
+        });
+      }
+
+      // Get post to verify project access
+      const post = await postRepository.getById(postId);
+      if (!post) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Post not found'
+        });
+      }
+
+      // Get project to verify customer access
+      const project = await projectRepository.getById(post.projectId);
+      if (!project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found'
+        });
+      }
+
+      // Verify user has access to the customer
+      const customerAccess = await customerRepository.listUserCustomers(user.id);
+      const hasAccess = customerAccess.some(c => c.customerId === project.customerId);
+      
+      if (!hasAccess) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: "You don't have permission to view this post"
+        });
+      }
+
+      return post;
     }),
 });

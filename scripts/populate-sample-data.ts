@@ -260,15 +260,19 @@ async function createSampleData() {
           customerId: customer.id,
           objective: sampleProjects[index]!.objective,
         };
-        const existingProject = await projectRepo.getById(customer.id);
+        
+        // Get existing projects for this customer
+        const existingProjects = await projectRepo.listByCustomer(customer.id);
+        const existingProject = existingProjects.find(p => p.name === projectData.name);
+        
         if (existingProject) {
           // Update existing project
-          const project = await projectRepo.upsert(projectData, { mode: 'update', projectId: existingProject.id });
+          const project = await projectRepo.update(existingProject.id, projectData);
           console.log(`Updated project: ${project.name} for ${customer.name}`);
           return project;
         } else {
           // Create new project
-          const project = await projectRepo.upsert(projectData, { mode: 'create' });
+          const project = await projectRepo.create(projectData);
           console.log(`Created project: ${project.name} for ${customer.name}`);
           return project;
         }

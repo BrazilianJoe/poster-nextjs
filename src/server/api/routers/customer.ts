@@ -130,14 +130,33 @@ export const customerRouter = createTRPCRouter({
       return null;
     }
 
+    // Find internal user ID using Clerk ID
+    const user = await userRepository.findByClerkId(userId);
+    if (!user) {
+      console.log('No internal user found for Clerk ID:', userId);
+      return null;
+    }
+
     // Get all customers the user has access to
-    const customers = await customerRepository.listUserCustomersWithDetails(userId);
-    if (customers.length === 0) {
+    const customerAccess = await customerRepository.listUserCustomers(user.id);
+    if (customerAccess.length === 0) {
       console.log('No customers found for user');
       return null;
     }
 
-    // Return the first customer (could be enhanced to remember last active)
-    return customers[0];
+    // Get the first customer's details
+    const firstCustomerId = customerAccess[0]?.customerId;
+    if (!firstCustomerId) {
+      console.log('No customer ID found in access list');
+      return null;
+    }
+
+    const firstCustomer = await customerRepository.getById(firstCustomerId);
+    if (!firstCustomer) {
+      console.log('First customer not found');
+      return null;
+    }
+
+    return firstCustomer;
   }),
 }); 
