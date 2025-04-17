@@ -1,4 +1,4 @@
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc"
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc"
 import { RedisProjectRepository } from "~/server/data/repositories/redisProjectRepository"
 import { RedisCustomerRepository } from "~/server/data/repositories/redisCustomerRepository"
 import { RedisUserRepository } from "~/server/data/repositories/redisUserRepository"
@@ -67,5 +67,33 @@ export const projectRouter = createTRPCRouter({
       return projects.filter((project: Project | null): project is Project => 
         project !== null && project.customerId === customerId
       )
+    }),
+
+  getById: protectedProcedure
+    .input(z.string())
+    .query(async ({ ctx, input: projectId }) => {
+      if (!ctx.userId) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Not authenticated' });
+      }
+      
+      const user = await userRepository.findByClerkId(ctx.userId);
+      if (!user) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'User not found in system' });
+      }
+
+      const project = await projectRepository.getById(projectId);
+      if (!project) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Project not found' });
+      }
+
+      // Verify user has access to the customer associated with this project
+      const customerAccess = await customerRepository.listUserCustomers(user.id);
+      const hasAccess = customerAccess.some(c => c.customerId === project.customerId);
+
+      if (!hasAccess) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Access denied to this project' });
+      }
+
+      return project;
     }),
 }) 

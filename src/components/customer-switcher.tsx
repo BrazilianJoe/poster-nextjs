@@ -20,54 +20,28 @@ import {
 import { api } from "~/trpc/react"
 import type { Customer } from "~/server/data/types"
 import { cn } from "~/lib/utils"
+import { useRouter } from 'next/navigation';
 
-interface CustomerSwitcherProps {
-  onCustomerChange?: (customerId: string) => void
-  activeCustomerId?: string
-}
-
-export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: CustomerSwitcherProps) {
+export function CustomerSwitcher() {
   const { isMobile, open: isSidebarOpen } = useSidebar()
+  const router = useRouter();
   const { data: customers = [], isLoading, error } = api.customer.list.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
   })
   const [activeCustomer, setActiveCustomer] = React.useState<Customer | undefined>(undefined)
 
-  // Add debug logging
   React.useEffect(() => {
-    console.log('Component state:', {
-      customers,
-      isLoading,
-      error,
-      activeCustomer,
-      activeCustomerId
-    })
-  }, [customers, isLoading, error, activeCustomer, activeCustomerId])
-
-  // Update active customer when customers data changes or activeCustomerId changes
-  React.useEffect(() => {
-    if (customers.length > 0) {
-      console.log('Setting active customer from customers list:', customers)
-      if (activeCustomerId) {
-        const customer = customers.find(c => c.id === activeCustomerId)
-        console.log('Found customer by ID:', customer)
-        if (customer) {
-          setActiveCustomer(customer)
-        }
-      } else if (!activeCustomer) {
-        console.log('Setting first customer as active:', customers[0])
-        setActiveCustomer(customers[0])
-      }
+    if (customers.length > 0 && !activeCustomer) {
+      setActiveCustomer(customers[0])
     }
-  }, [customers, activeCustomer, activeCustomerId])
+  }, [customers, activeCustomer])
 
   const handleCustomerChange = (customer: Customer) => {
-    setActiveCustomer(customer)
-    onCustomerChange?.(customer.id)
+    setActiveCustomer(customer);
+    router.push(`/customer/${customer.id}/dashboard`);
   }
 
-  // Show error state
   if (error) {
     return (
       <SidebarMenu>
@@ -81,7 +55,7 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
             </div>
             {isSidebarOpen && (
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">Error loading customers</span>
+                <span className="truncate font-medium">Error loading</span>
                 <span className="truncate text-xs">Please try again</span>
               </div>
             )}
@@ -91,7 +65,6 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
     )
   }
 
-  // Show loading state
   if (isLoading) {
     return (
       <SidebarMenu>
@@ -105,7 +78,7 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
             </div>
             {isSidebarOpen && (
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">Loading customers...</span>
+                <span className="truncate font-medium">Loading...</span>
                 <span className="truncate text-xs">Please wait</span>
               </div>
             )}
@@ -115,7 +88,6 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
     )
   }
 
-  // If there are no customers, show a placeholder
   if (customers.length === 0) {
     return (
       <SidebarMenu>
@@ -130,7 +102,7 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
             {isSidebarOpen && (
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">No customers</span>
-                <span className="truncate text-xs">Add your first customer</span>
+                <span className="truncate text-xs">Add customer</span>
               </div>
             )}
           </SidebarMenuButton>
@@ -139,7 +111,6 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
     )
   }
 
-  // If there are customers but none is active yet, show loading state
   if (!activeCustomer) {
     return (
       <SidebarMenu>
@@ -153,8 +124,8 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
             </div>
             {isSidebarOpen && (
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">Select a customer</span>
-                <span className="truncate text-xs">Choose from the list</span>
+                <span className="truncate font-medium">Select customer</span>
+                <span className="truncate text-xs">Loading...</span>
               </div>
             )}
           </SidebarMenuButton>
@@ -183,16 +154,16 @@ export function CustomerSwitcher({ onCustomerChange, activeCustomerId }: Custome
                   <>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-medium">{activeCustomer.name}</span>
-                      <span className="truncate text-xs">{activeCustomer.industry}</span>
+                      <span className="truncate text-xs">{activeCustomer.industry ?? 'Industry N/A'}</span>
                     </div>
-                    <ChevronsUpDown className="ml-auto" />
+                    <ChevronsUpDown className="ml-auto size-4 shrink-0 opacity-50" />
                   </>
                 )}
               </SidebarMenuButton>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-lg"
             align="start"
             side={isMobile ? "bottom" : "right"}
             sideOffset={4}
