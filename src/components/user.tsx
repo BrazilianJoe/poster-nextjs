@@ -14,6 +14,7 @@ import {
 import { useSidebar } from "~/components/ui/sidebar"
 import { SidebarMenuButton } from "~/components/ui/sidebar"
 import { cn } from "~/lib/utils"
+import Link from "next/link"
 
 export function User() {
   const { user } = useClerk()
@@ -55,8 +56,8 @@ export function User() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          Profile
+        <DropdownMenuItem asChild>
+          <Link href="/user">Profile</Link>
         </DropdownMenuItem>
         <DropdownMenuItem>
           Settings

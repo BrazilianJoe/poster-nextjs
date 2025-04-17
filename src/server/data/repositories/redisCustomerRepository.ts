@@ -280,7 +280,7 @@ export class RedisCustomerRepository implements ICustomerRepository {
             customerAccess.map(async ({ customerId, role }) => {
                 console.log('Fetching customer:', customerId);
                 const customer = await this.getById(customerId);
-                console.log('Retrieved customer:', customer);
+                //console.log('Retrieved customer:', customer);
                 if (!customer) return null;
                 
                 // Create a new object with only the necessary properties
@@ -299,7 +299,7 @@ export class RedisCustomerRepository implements ICustomerRepository {
         );
         
         const validCustomers = customers.filter((c): c is Customer & { role: UserRole } => c !== null);
-        console.log('Valid customers with roles:', validCustomers);
+        //console.log('Valid customers with roles:', validCustomers);
         return validCustomers;
     }
 

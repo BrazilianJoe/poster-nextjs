@@ -30,7 +30,7 @@ export const customerRouter = createTRPCRouter({
     
     console.log("Found internal user:", user.id);
     const customers = await customerRepository.listUserCustomersWithDetails(user.id);
-    console.log("Customer router - list - customers:", customers);
+    //console.log("Customer router - list - customers:", customers);
     return customers;
   }),
 

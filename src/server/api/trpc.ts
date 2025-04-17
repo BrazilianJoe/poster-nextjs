@@ -26,7 +26,7 @@ import { type NextRequest } from "next/server";
  */
 export const createTRPCContext = async (opts: { headers: Headers; req?: NextRequest }) => {
   const auth = opts.req ? getAuth(opts.req) : { userId: null };
-  console.log('TRPC Context - Auth:', auth);
+  //console.log('TRPC Context - Auth:', auth);
   return {
     ...opts,
     userId: auth.userId,

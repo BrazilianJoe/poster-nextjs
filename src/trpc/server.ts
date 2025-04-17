@@ -23,7 +23,7 @@ const createContext = cache(async () => {
   
   // Get the auth state from Clerk
   const { userId } = getAuth(req);
-  console.log('Server Component - Auth:', { userId });
+  //console.log('Server Component - Auth:', { userId });
 
   return createTRPCContext({
     headers: heads,
